@@ -1,4 +1,4 @@
-# Final_games — AI vs Human Collection
+# Games for IISc Open Day 2026 — AI vs Human Collection
 
 This repository contains three small games that let an AI play against a human.
 
