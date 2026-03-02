@@ -1,3 +1,4 @@
+# dual_snake_rl.py
 import pygame
 import random
 import numpy as np
@@ -159,10 +160,10 @@ class SnakeSide:
     def get_state(self):
         """11-feature state vector used during training."""
         head = self.snake[0]
-        pl = Point(head.x - 20, head.y)
-        pr = Point(head.x + 20, head.y)
-        pu = Point(head.x,      head.y - 20)
-        pd = Point(head.x,      head.y + 20)
+        pl = Point(head.x - BLOCK_SIZE, head.y)
+        pr = Point(head.x + BLOCK_SIZE, head.y)
+        pu = Point(head.x,      head.y - BLOCK_SIZE)
+        pd = Point(head.x,      head.y + BLOCK_SIZE)
 
         dl = self.direction == Direction.LEFT
         dr = self.direction == Direction.RIGHT
@@ -234,18 +235,40 @@ class DualSnakeGame:
         pygame.display.set_caption('Snake Showdown  —  Human vs AI')
         self.clock = pygame.time.Clock()
 
-        # Load AI model
-        self.ai_model = Linear_QNet(11, 256, 3)
+        # Attempt to import Agent (user's RL wrapper) and try to load trained model.
+        self.agent = None
+        self.ai_model = None
         self.ai_loaded = False
         try:
-            self.ai_model.load_state_dict(
-                torch.load('./model/model.pth', map_location='cpu'))
-            self.ai_model.eval()
-            self.ai_loaded = True
-            print("AI model loaded successfully.")
-        except Exception as e:
-            print(f"Could not load AI model: {e}")
-            print("AI will play randomly.")
+            # If the user provides an Agent class (like in your reference), use it.
+            from agent import Agent
+            self.agent = Agent()
+            try:
+                # try load into agent.model
+                self.agent.model.load_state_dict(torch.load('./model/model.pth', map_location='cpu'))
+                self.agent.model.eval()
+                self.ai_loaded = True
+                print("Agent model loaded successfully (agent.py).")
+            except Exception as e_agent:
+                print(f"Could not load model into Agent: {e_agent}")
+                self.agent = None
+        except Exception:
+            # agent.py not present or failed to import — we'll fallback to local Linear_QNet
+            self.agent = None
+
+        if self.agent is None:
+            # Fallback model: same architecture as your training script expects (11 -> 256 -> 3)
+            self.ai_model = Linear_QNet(11, 256, 3)
+            try:
+                self.ai_model.load_state_dict(
+                    torch.load('./model/model.pth', map_location='cpu'))
+                self.ai_model.eval()
+                self.ai_loaded = True
+                print("AI model loaded successfully (fallback Linear_QNet).")
+            except Exception as e:
+                print(f"Could not load AI model: {e}")
+                print("AI will play randomly or with fallback network (if available).")
+                self.ai_loaded = False
 
         self.human = SnakeSide(x_offset=0,              w=self.PANEL_W, h=self.H)
         self.ai    = SnakeSide(x_offset=self.PANEL_W + self.DIVIDER, w=self.PANEL_W, h=self.H)
@@ -255,12 +278,49 @@ class DualSnakeGame:
 
     # ── helpers ──────────────────────────────────────────────────────────────
     def _ai_action(self):
-        if not self.ai_loaded:
-            return [random.choice([[1,0,0],[0,1,0],[0,0,1]])]
-        state = torch.tensor(self.ai.get_state(), dtype=torch.float)
-        with torch.no_grad():
-            pred = self.ai_model(state)
-        move = torch.argmax(pred).item()
+        """
+        Returns an action list: [1,0,0] (straight) or [0,1,0] (right) or [0,0,1] (left).
+        Uses Agent.model if available, else self.ai_model, else random.
+        """
+        # Random fallback
+        if not (self.ai_loaded or self.agent or self.ai_model):
+            return random.choice([[1,0,0],[0,1,0],[0,0,1]])
+
+        state_np = self.ai.get_state()
+        state_tensor = torch.tensor(state_np, dtype=torch.float)
+
+        model = None
+        if self.agent is not None:
+            model = self.agent.model
+        elif self.ai_model is not None:
+            model = self.ai_model
+
+        if model is None:
+            return random.choice([[1,0,0],[0,1,0],[0,0,1]])
+
+        try:
+            with torch.no_grad():
+                # Try feeding the 1D tensor; if model expects batch dim, handle below.
+                pred = model(state_tensor)
+        except Exception:
+            # Try with batch dimension
+            try:
+                with torch.no_grad():
+                    pred = model(state_tensor.unsqueeze(0))
+            except Exception:
+                # Something incompatible — fallback to random
+                return random.choice([[1,0,0],[0,1,0],[0,0,1]])
+
+        # If model returned batched output, squeeze it.
+        if isinstance(pred, torch.Tensor) and pred.dim() > 1:
+            pred = pred.squeeze(0)
+
+        # Convert to an action
+        try:
+            move = int(torch.argmax(pred).item())
+        except Exception:
+            return random.choice([[1,0,0],[0,1,0],[0,0,1]])
+
         action = [0, 0, 0]
         action[move] = 1
         return action
@@ -317,11 +377,11 @@ class DualSnakeGame:
                          pygame.Rect(0, bar_y, self.total_w, self.SCORE_BAR))
 
         # Human score (left)
-        h_txt = font_medium.render(f"👤 Human: {self.human.score}", True, GREEN)
+        h_txt = font_medium.render(f"Human: {self.human.score}", True, GREEN)
         self.display.blit(h_txt, (20, bar_y + 10))
 
         # AI score (right)
-        ai_txt = font_medium.render(f"🤖 AI: {self.ai.score}", True, PURPLE)
+        ai_txt = font_medium.render(f"AI: {self.ai.score}", True, PURPLE)
         self.display.blit(ai_txt,
             (self.total_w - ai_txt.get_width() - 20, bar_y + 10))
 
@@ -361,7 +421,7 @@ class DualSnakeGame:
         self._draw_score_bar()
         pygame.display.flip()
 
-    # ── main loop ────────────────────────────────────────────────────────────
+    # ── main loop ───────────────────────────────────────────────────────────
     def run(self):
         while True:
             if self.state == 'start':
@@ -458,5 +518,3 @@ class DualSnakeGame:
 if __name__ == '__main__':
     game = DualSnakeGame()
     game.run()
-
-
