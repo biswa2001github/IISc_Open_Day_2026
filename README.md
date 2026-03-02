@@ -57,4 +57,3 @@ pip install -r requirements.txt
 - If you experience issues launching the games, confirm your virtual environment is active and the packages in `requirements.txt` installed correctly.
 - These games rely on `pygame` and other dependencies listed in `requirements.txt`.
 
-Enjoy testing the AI vs human games! If you want, I can also add short usage instructions or key mappings for each game.
