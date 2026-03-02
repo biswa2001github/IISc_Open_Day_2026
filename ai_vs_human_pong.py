@@ -6,7 +6,7 @@ import ale_py
 
 # ================= CONFIG & STYLE =================
 WIDTH, HEIGHT = 1000, 700  # High-res window
-FPS = 40 # increase or decrease ball speed
+FPS = 30 # increase or decrease ball speed
 
 # Colors (Retro Synthwave Theme)
 BG_COLOR = (15, 15, 25)
@@ -28,7 +28,7 @@ font_big = pygame.font.SysFont("Impact", 50)
 font_med = pygame.font.SysFont("Arial", 30, bold=True)
 
 # Initialize Gymnasium with rgb_array so we can upscale it
-env = gym.make("ALE/Pong-v5", render_mode="rgb_array", frameskip=2)
+env = gym.make("ALE/Pong-v5", render_mode="rgb_array", frameskip=1)
 
 # ================= UTILS =================
 def draw_text(text, font, color, x, y):
@@ -134,6 +134,7 @@ def play_game():
 
         pygame.display.flip()
         clock.tick(FPS)
+        
 
 # Run State Machine
 while True:
