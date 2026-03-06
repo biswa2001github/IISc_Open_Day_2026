@@ -39,7 +39,7 @@ PURPLE     = (160, 32,  240)
 CYAN       = (0,   200, 200)
 
 BLOCK_SIZE = 20
-SPEED      = 12
+SPEED      = 8
 
 # ── Direction / Point ────────────────────────────────────────────────────────
 class Direction(Enum):
